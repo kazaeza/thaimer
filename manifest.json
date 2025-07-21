@@ -1,0 +1,29 @@
+{
+  "name": "Thai Boxer Workout Timer",
+  "short_name": "Thai HIIT",
+  "description": "A workout timer with a selection of 7 different daily routines for Thai boxing conditioning, complete with audio cues.",
+  "icons": [
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#f97316"
+}
