@@ -1,0 +1,59 @@
+name: Android APK
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'android/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      # Robolectric's Android 15 runtime needs Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests and screenshots
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Release APK and lint
+        run: ./gradlew --no-daemon assembleRelease lintRelease
+
+      - name: Collect APK
+        run: cp app/build/outputs/apk/release/app-release.apk thaimer.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thaimer-apk
+          path: android/thaimer.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: android/app/build/screenshots
+          if-no-files-found: ignore
+
+      - name: Publish release (tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/thaimer.apk
