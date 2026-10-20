@@ -25,7 +25,7 @@ class ThermoService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var notifier: Notifier
     private lateinit var sound: AlarmSound
-    private var ringing = false
+    private var ringing = emptySet<Int>()
     private var lastStatusAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -67,16 +67,21 @@ class ThermoService : Service() {
 
     private fun onState() {
         val s = Thermo.state.value
-        val nowRinging = s.ringingProbes.isNotEmpty()
-        if (nowRinging) notifier.showDone(s)
+        val nowRinging = s.ringingProbes.map { it.number }.toSet()
         if (nowRinging != ringing) {
+            val added = nowRinging - ringing
             ringing = nowRinging
-            if (nowRinging) {
-                sound.start()
-            } else {
+            if (nowRinging.isEmpty()) {
                 sound.stop()
                 notifier.cancelDone()
+            } else {
+                notifier.showDone(s, alert = added.isNotEmpty())
+                // Also brings the sound back if it timed out on an earlier probe.
+                if (added.isNotEmpty()) sound.start()
             }
+        } else if (nowRinging.isNotEmpty()) {
+            // Keep the temperature on the lock screen current while it rings.
+            notifier.showDone(s, alert = false)
         }
         if (!s.lostWhileCooking) notifier.cancelLost()
 

@@ -16,7 +16,7 @@
     <string name="probe_black">Чёрный щуп</string>
     <string name="probe_white">Белый щуп</string>
     <string name="probe_n">Щуп %d</string>
-    <string name="probe_absent">Щуп не подключён</string>
+    <string name="probe_absent">Нет сигнала от щупа</string>
 
     <string name="set_target">Задать цель</string>
     <string name="target_fmt">Цель %1$s</string>
@@ -56,4 +56,35 @@
     <string name="notif_lost_text">Подойдите ближе, я переподключусь сам</string>
     <string name="notif_shutdown">Завершить</string>
     <string name="no_value">—</string>
+
+    <string name="edit_target">Изменить цель</string>
+    <string name="target_changed">%1$s: цель %2$s</string>
+    <string name="target_cleared">%s: цель убрана</string>
+    <string name="undo">Отменить</string>
+
+    <string name="chart_title">График</string>
+    <string name="open_chart">Открыть график</string>
+    <string name="back">Назад</string>
+    <string name="range_15m">15 мин</string>
+    <string name="range_1h">1 ч</string>
+    <string name="range_3h">3 ч</string>
+    <string name="range_all">Всё</string>
+    <string name="chart_empty">Пока нет данных. График начнётся, как только щуп покажет температуру.</string>
+    <string name="chart_hint">Ведите пальцем по графику, чтобы посмотреть температуру в любой момент.</string>
+    <string name="chart_clear">Очистить график</string>
+    <string name="chart_clear_title">Очистить график?</string>
+    <string name="chart_clear_text">Вся история температур будет удалена. Это нельзя отменить.</string>
+    <string name="action_clear">Очистить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="rate_fmt">%s/мин</string>
+    <string name="eta_at">%1$s · к %2$s</string>
+    <string name="no_target">Цель не задана</string>
+    <string name="cooking_for">Готовка идёт %s</string>
+    <string name="cooked_for">Последняя готовка: %s</string>
+    <string name="duration_min">%d мин</string>
+    <string name="duration_hm">%1$d ч %2$d мин</string>
+
+    <string name="forget_title">Забыть термометр?</string>
+    <string name="forget_text">Приложение отключится и найдёт термометр заново. Цели и график сохранятся.</string>
+    <string name="action_forget">Забыть</string>
 </resources>

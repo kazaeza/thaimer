@@ -47,6 +47,7 @@ import com.thaimer.bfour.core.ProbeState
 import com.thaimer.bfour.core.Target
 import com.thaimer.bfour.core.ThermoState
 import com.thaimer.bfour.core.probeName
+import kotlin.math.roundToInt
 
 private const val DEFAULT_TARGET_C = 63.0
 
@@ -123,7 +124,7 @@ fun TargetSheet(
             }
             Slider(
                 value = value.toFloat(),
-                onValueChange = { value = it.toInt() },
+                onValueChange = { value = it.roundToInt() },
                 valueRange = min.toFloat()..max.toFloat(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {

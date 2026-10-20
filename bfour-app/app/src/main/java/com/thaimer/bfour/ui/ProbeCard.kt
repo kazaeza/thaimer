@@ -1,9 +1,9 @@
 package com.thaimer.bfour.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,8 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -32,11 +34,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -46,16 +45,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thaimer.bfour.R
 import com.thaimer.bfour.alarm.AlarmRules
+import com.thaimer.bfour.core.ChartRange
+import com.thaimer.bfour.core.ChartWindow
 import com.thaimer.bfour.core.Link
+import com.thaimer.bfour.core.LogView
 import com.thaimer.bfour.core.ProbeState
-import com.thaimer.bfour.core.Sample
 import com.thaimer.bfour.core.ThermoState
 import com.thaimer.bfour.core.probeName
 
 private enum class Phase { IDLE, COOKING, ALMOST, DONE }
 
+/**
+ * One probe: big current temperature, its target and a live chart of the cook.
+ * The card itself is not a button; only the target row (or "set target") and
+ * the chart react to taps, so a stray touch can't change anything.
+ */
 @Composable
-fun ProbeCard(probe: ProbeState, state: ThermoState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ProbeCard(
+    probe: ProbeState,
+    state: ThermoState,
+    log: LogView,
+    nowMs: Long,
+    onEditTarget: () -> Unit,
+    onOpenChart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val cook = LocalCookColors.current
     val colors = MaterialTheme.colorScheme
     val target = probe.target
@@ -80,15 +94,17 @@ fun ProbeCard(probe: ProbeState, state: ThermoState, onClick: () -> Unit, modifi
         else -> colors.onSurface
     }
     val unit = state.unit
+    val line = chartLine(probe, log, nowMs, if (phase == Phase.DONE) content else cook.line(probe.number))
+    // Yesterday's cook belongs on the chart screen, not on today's card.
+    val hasChart = ChartWindow.cook(log, nowMs)?.ongoing == true || temp != null
 
     Surface(
-        onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
         color = container,
         contentColor = content,
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ProbeDot(probe.number, state.probes.size)
                 Spacer(Modifier.width(10.dp))
@@ -111,13 +127,13 @@ fun ProbeCard(probe: ProbeState, state: ThermoState, onClick: () -> Unit, modifi
                         unit.format(temp),
                         style = TextStyle(color = content, fontWeight = FontWeight.Bold),
                         maxLines = 1,
-                        autoSize = TextAutoSize.StepBased(minFontSize = 36.sp, maxFontSize = 96.sp),
+                        autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = 96.sp),
                         modifier = Modifier.weight(1f, fill = false),
                     )
                 } else {
                     Text(
                         stringResource(R.string.no_value),
-                        fontSize = 56.sp,
+                        fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = content.copy(alpha = 0.35f),
                     )
@@ -132,55 +148,82 @@ fun ProbeCard(probe: ProbeState, state: ThermoState, onClick: () -> Unit, modifi
             }
 
             if (target != null) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val label = stringResource(R.string.target_fmt, unit.formatWhole(target.celsius)) +
-                            (target.label?.let { " · $it" } ?: "")
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        val eta = if (phase == Phase.COOKING || phase == Phase.ALMOST) probe.etaMinutes else null
-                        if (eta != null && eta > 0) {
-                            Text(etaText(eta), style = MaterialTheme.typography.titleMedium)
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { ((temp ?: 0.0) / target.celsius).toFloat().coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(10.dp),
-                        color = if (phase == Phase.DONE) content else colors.primary,
-                        trackColor = content.copy(alpha = 0.15f),
-                        gapSize = 0.dp,
-                        drawStopIndicator = {},
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClickLabel = stringResource(R.string.edit_target), onClick = onEditTarget)
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val label = stringResource(R.string.target_fmt, unit.formatWhole(target.celsius)) +
+                        (target.label?.let { " · $it" } ?: "")
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Sparkline(
-                        history = probe.history,
-                        targetC = target.celsius,
-                        line = if (phase == Phase.DONE) content else colors.primary,
-                        guide = content.copy(alpha = 0.4f),
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                    val eta = line.etaMinutes
+                    if ((phase == Phase.COOKING || phase == Phase.ALMOST) && eta != null && eta > 0) {
+                        Text(etaText(eta), style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Icon(
+                        Icons.Rounded.Edit,
+                        contentDescription = stringResource(R.string.edit_target),
+                        modifier = Modifier.size(20.dp),
+                        tint = content.copy(alpha = 0.7f),
                     )
                 }
+                LinearProgressIndicator(
+                    progress = { ((temp ?: 0.0) / target.celsius).toFloat().coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                    color = line.color,
+                    trackColor = content.copy(alpha = 0.15f),
+                    gapSize = 0.dp,
+                    drawStopIndicator = {},
+                )
             } else {
-                FilledTonalButton(onClick = onClick) {
+                FilledTonalButton(onClick = onEditTarget) {
                     Icon(Icons.Rounded.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.set_target))
                 }
             }
+
+            if (hasChart) {
+                Spacer(Modifier.height(10.dp))
+                val (from, to) = ChartWindow.of(ChartRange.ALL, log, nowMs)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClickLabel = stringResource(R.string.open_chart), onClick = onOpenChart),
+                ) {
+                    TempChart(
+                        log = log,
+                        lines = listOf(line),
+                        fromMs = from,
+                        toMs = to,
+                        nowMs = nowMs,
+                        unit = unit,
+                        modifier = Modifier.fillMaxSize(),
+                        detailed = false,
+                    )
+                    Icon(
+                        Icons.Rounded.OpenInFull,
+                        contentDescription = stringResource(R.string.open_chart),
+                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp),
+                        tint = content.copy(alpha = 0.5f),
+                    )
+                }
+            }
         }
     }
 }
-
-@Composable
-private fun etaText(minutes: Int): String =
-    if (minutes < 60) stringResource(R.string.eta_min, minutes)
-    else stringResource(R.string.eta_hours, minutes / 60, minutes % 60)
 
 /** Inverted pill so it stands out on any card colour. */
 @Composable
@@ -208,46 +251,4 @@ fun ProbeDot(number: Int, count: Int) {
             .background(fill, CircleShape)
             .border(1.5.dp, edge, CircleShape)
     )
-}
-
-/** The last hour of temperatures with the target as a dashed line. */
-@Composable
-private fun Sparkline(
-    history: List<Sample>,
-    targetC: Double,
-    line: Color,
-    guide: Color,
-    modifier: Modifier = Modifier,
-) {
-    if (history.size < 2) {
-        Spacer(modifier)
-        return
-    }
-    val from = history.last().timeMs - 60 * 60_000L
-    val points = history.filter { it.timeMs >= from }
-    if (points.size < 2) {
-        Spacer(modifier)
-        return
-    }
-    Canvas(modifier) {
-        val t0 = points.first().timeMs.toFloat()
-        val span = (points.last().timeMs - points.first().timeMs).coerceAtLeast(1).toFloat()
-        val lo = minOf(points.minOf { it.celsius }, targetC) - 2
-        val hi = maxOf(points.maxOf { it.celsius }, targetC) + 2
-        fun x(t: Long) = (t - t0) / span * size.width
-        fun y(c: Double) = (size.height - (c - lo) / (hi - lo) * size.height).toFloat()
-
-        drawLine(
-            guide,
-            Offset(0f, y(targetC)),
-            Offset(size.width, y(targetC)),
-            strokeWidth = 2.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f)),
-        )
-        val path = Path().apply {
-            moveTo(x(points.first().timeMs), y(points.first().celsius))
-            points.drop(1).forEach { lineTo(x(it.timeMs), y(it.celsius)) }
-        }
-        drawPath(path, line, style = Stroke(width = 3.dp.toPx()))
-    }
 }

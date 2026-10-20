@@ -14,12 +14,8 @@ data class ProbeState(
     val number: Int,
     val celsius: Double?,
     val target: Target?,
-    val history: List<Sample>,
     val ringing: Boolean,
-) {
-    val etaMinutes: Int?
-        get() = target?.let { Eta.minutesToTarget(history, it.celsius) }
-}
+)
 
 data class ThermoState(
     val link: Link = Link.IDLE,

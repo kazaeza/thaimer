@@ -22,6 +22,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.util.isNotEmpty
@@ -57,7 +58,12 @@ class BfourConnection(
     private var gatt: BluetoothGatt? = null
     private var writeChar: BluetoothGattCharacteristic? = null
     private var scanning = false
+    private var lastScanStartAt = 0L
     private var attempt = 0
+    private var ready = false
+
+    /** Failed direct connections to the saved address since the link was last up. */
+    private var directFailures = 0
 
     private val queue = ArrayDeque<ByteArray>()
     private var writing = false
@@ -94,7 +100,10 @@ class BfourConnection(
     /** Forget the paired thermometer and scan for any BFOUR device. */
     fun forget() {
         address = null
+        directFailures = 0
         if (running) {
+            // Also ends a scan in progress: begin() starts a fresh one with its restart timer.
+            stopScan()
             closeGatt()
             main.removeCallbacksAndMessages(null)
             attempt = 0
@@ -117,24 +126,44 @@ class BfourConnection(
             return
         }
         val addr = address
-        if (addr == null) startScan() else connect(addr)
+        when {
+            addr == null -> startScan()
+            directFailures < DIRECT_TRIES -> connect(addr)
+            // Some phones can't connect by address alone (e.g. after a reboot)
+            // until the device has been seen in a scan.
+            else -> startScan()
+        }
     }
 
     private fun connect(addr: String) {
-        val bt = adapter ?: return
-        listener.onLink(Link.CONNECTING)
-        val device = runCatching { bt.getRemoteDevice(addr) }.getOrNull()
+        val device = runCatching { adapter?.getRemoteDevice(addr) }.getOrNull()
         if (device == null) {
             address = null
             begin()
             return
         }
-        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        connect(device)
+    }
+
+    private fun connect(device: BluetoothDevice) {
+        listener.onLink(Link.CONNECTING)
+        val g = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        if (g == null) {
+            onAttemptFailed()
+            return
+        }
+        gatt = g
         main.postDelayed(connectTimeout, CONNECT_TIMEOUT_MS)
     }
 
     private val connectTimeout = Runnable {
         Log.w(TAG, "connect timeout")
+        onAttemptFailed()
+    }
+
+    /** The link never became ready: count it and try again. */
+    private fun onAttemptFailed() {
+        directFailures++
         closeGatt()
         scheduleRetry()
     }
@@ -150,6 +179,7 @@ class BfourConnection(
 
     private fun closeGatt() {
         main.removeCallbacks(connectTimeout)
+        ready = false
         queue.clear()
         writing = false
         writeChar = null
@@ -166,13 +196,29 @@ class BfourConnection(
         val scanner = adapter?.bluetoothLeScanner ?: return scheduleRetry()
         if (scanning) return
         listener.onLink(Link.SEARCHING)
+        // Android silently ignores a 6th scan started within 30 seconds.
+        val wait = lastScanStartAt + MIN_SCAN_INTERVAL_MS - SystemClock.elapsedRealtime()
+        if (lastScanStartAt != 0L && wait > 0) {
+            main.postDelayed({ begin() }, wait)
+            return
+        }
         val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(BfourProtocol.SERVICE)).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         scanning = runCatching { scanner.startScan(listOf(filter), settings, scanCallback) }.isSuccess
-        if (!scanning) scheduleRetry()
+        lastScanStartAt = SystemClock.elapsedRealtime()
+        if (scanning) main.postDelayed(scanRestart, SCAN_RESTART_MS) else scheduleRetry()
+    }
+
+    /** Android downgrades scans running for 30 minutes to "opportunistic"; start a fresh one. */
+    private val scanRestart = Runnable {
+        if (scanning) {
+            stopScan()
+            startScan()
+        }
     }
 
     private fun stopScan() {
+        main.removeCallbacks(scanRestart)
         if (!scanning) return
         scanning = false
         runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
@@ -194,15 +240,18 @@ class BfourConnection(
 
     private fun onFound(result: ScanResult) {
         if (!scanning || !running) return
+        val addr = result.device.address
+        val saved = address
+        // Looking for our own thermometer: ignore a neighbour's.
+        if (saved != null && !addr.equals(saved, ignoreCase = true)) return
         val md = result.scanRecord?.manufacturerSpecificData
         val payload = if (md != null && md.isNotEmpty()) md.valueAt(0) else null
         val type = BfourProtocol.deviceTypeFromManufacturerPayload(payload)
         stopScan()
-        val addr = result.device.address
         address = addr
         attempt = 0
         listener.onDeviceFound(addr, type)
-        connect(addr)
+        connect(result.device)
     }
 
     // ---- GATT ---------------------------------------------------------------
@@ -220,8 +269,12 @@ class BfourConnection(
                     main.postDelayed({ if (g == gatt) g.discoverServices() }, 300)
                 } else {
                     Log.i(TAG, "disconnected status=$status state=$newState")
-                    closeGatt()
-                    scheduleRetry()
+                    if (ready) {
+                        closeGatt()
+                        scheduleRetry()
+                    } else {
+                        onAttemptFailed()
+                    }
                 }
             }
         }
@@ -234,8 +287,7 @@ class BfourConnection(
                 val notify = service?.getCharacteristic(BfourProtocol.NOTIFY_CHAR)
                 if (status != BluetoothGatt.GATT_SUCCESS || write == null || notify == null) {
                     Log.w(TAG, "services missing, status=$status")
-                    closeGatt()
-                    scheduleRetry()
+                    onAttemptFailed()
                     return@post
                 }
                 writeChar = write
@@ -247,8 +299,7 @@ class BfourConnection(
             main.post {
                 if (g != gatt || d.uuid != BfourProtocol.CCCD) return@post
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    closeGatt()
-                    scheduleRetry()
+                    onAttemptFailed()
                     return@post
                 }
                 onLinkReady()
@@ -300,7 +351,9 @@ class BfourConnection(
 
     private fun onLinkReady() {
         main.removeCallbacks(connectTimeout)
+        ready = true
         attempt = 0
+        directFailures = 0
         listener.onLink(Link.CONNECTED)
         listener.onReady()
         pump()
@@ -352,5 +405,8 @@ class BfourConnection(
         const val RETRY_BASE_MS = 1_000L
         const val RETRY_MAX_MS = 10_000L
         const val WRITE_GAP_MS = 400L
+        const val DIRECT_TRIES = 2
+        const val SCAN_RESTART_MS = 10 * 60_000L
+        const val MIN_SCAN_INTERVAL_MS = 6_500L
     }
 }

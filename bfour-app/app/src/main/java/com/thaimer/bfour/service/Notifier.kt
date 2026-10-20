@@ -17,6 +17,7 @@ import com.thaimer.bfour.ui.MainActivity
 
 class Notifier(private val context: Context) {
     private val nm = context.getSystemService(NotificationManager::class.java)
+    private var lastDoneText: String? = null
 
     fun createChannels() {
         nm.createNotificationChannels(
@@ -54,7 +55,12 @@ class Notifier(private val context: Context) {
             .build()
     }
 
-    fun showDone(s: ThermoState) {
+    /**
+     * [alert] is true when a probe has just started ringing: that pops the
+     * notification up. Otherwise the text is only refreshed, quietly, and only
+     * when it changed.
+     */
+    fun showDone(s: ThermoState, alert: Boolean) {
         val ringing = s.ringingProbes
         if (ringing.isEmpty()) return cancelDone()
         val text = ringing.joinToString("\n") { p ->
@@ -65,6 +71,8 @@ class Notifier(private val context: Context) {
                 p.target?.let { s.unit.formatWhole(it.celsius) } ?: "",
             )
         }
+        if (!alert && text == lastDoneText) return
+        lastDoneText = text
         val n = NotificationCompat.Builder(context, CH_ALARM)
             .setSmallIcon(R.drawable.ic_stat_thermo)
             .setContentTitle(context.getString(R.string.alarm_title))
@@ -73,7 +81,7 @@ class Notifier(private val context: Context) {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(!alert)
             .setContentIntent(openApp(1, alarm = true))
             .setFullScreenIntent(openApp(2, alarm = true), true)
             .addAction(0, context.getString(R.string.alarm_stop), serviceIntent(ThermoService.ACTION_STOP_ALARM))
@@ -82,7 +90,10 @@ class Notifier(private val context: Context) {
         nm.notify(ID_DONE, n)
     }
 
-    fun cancelDone() = nm.cancel(ID_DONE)
+    fun cancelDone() {
+        lastDoneText = null
+        nm.cancel(ID_DONE)
+    }
 
     fun showAlmost(s: ThermoState, probe: ProbeState) {
         val target = probe.target ?: return

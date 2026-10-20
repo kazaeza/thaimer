@@ -32,6 +32,9 @@ object BfourProtocol {
 
     private const val NO_PROBE = 0xFFFF
 
+    /** The probes top out near 100 °C; anything far above is a glitch, not a temperature. */
+    private const val MAX_PLAUSIBLE_C = 350.0
+
     fun probeCount(deviceType: Int?): Int = when (deviceType) {
         TYPE_BF30 -> 1
         TYPE_BF20, TYPE_BF40, TYPE_BF60, null -> 2
@@ -101,7 +104,7 @@ object BfourProtocol {
         if (raw == NO_PROBE) return null
         // Same as the official app: a set sign bit is reported as 0 °C.
         if (hi and 0x80 != 0) return 0.0
-        return raw / 10.0
+        return (raw / 10.0).takeIf { it <= MAX_PLAUSIBLE_C }
     }
 
     /** Device type from manufacturer data payload (company id already stripped). */

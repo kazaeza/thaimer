@@ -29,6 +29,13 @@ class BfourProtocolTest {
     }
 
     @Test
+    fun `readings far above any probe's range are treated as no reading`() {
+        // 0x7FFE = 3276.6 °C
+        val msg = BfourProtocol.parse(bytes(0x55, 0x00, 0x7F, 0xFE, 0x02, 0x19), probeCount = 2)
+        assertEquals(Message.Temperatures(listOf(null, 53.7)), msg)
+    }
+
+    @Test
     fun `short packet leaves missing probes empty`() {
         val msg = BfourProtocol.parse(bytes(0x55, 0x00, 0x01, 0x00), probeCount = 2)
         assertEquals(Message.Temperatures(listOf(25.6, null)), msg)

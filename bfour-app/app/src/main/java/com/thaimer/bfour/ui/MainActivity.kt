@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,6 +73,8 @@ class MainActivity : ComponentActivity() {
 private fun App(onAlarmStopped: () -> Unit) {
     val context = LocalContext.current
     val state by Thermo.state.collectAsStateWithLifecycle()
+    val history by Thermo.history.collectAsStateWithLifecycle()
+    var showChart by rememberSaveable { mutableStateOf(false) }
     var granted by remember { mutableStateOf(Permissions.granted(context)) }
     var askedBefore by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -91,7 +94,16 @@ private fun App(onAlarmStopped: () -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         if (granted) {
-            MainScreen(state)
+            if (showChart) {
+                ChartScreen(
+                    state = state,
+                    log = history,
+                    onBack = { showChart = false },
+                    onClear = { Thermo.clearHistory() },
+                )
+            } else {
+                MainScreen(state, history, onOpenChart = { showChart = true })
+            }
         } else {
             PermissionScreen(
                 askedBefore = askedBefore,

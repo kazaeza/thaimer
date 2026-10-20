@@ -19,18 +19,30 @@ data class CookColors(
     val ok: Color,
     val wait: Color,
     val off: Color,
-)
+    /** Chart line for each probe; the thermometer's black/white won't show on a chart. */
+    val lines: List<Color>,
+) {
+    fun line(probe: Int): Color = lines[(probe - 1).mod(lines.size)]
+}
 
 private val DarkCook = CookColors(
     almost = Color(0xFF4A3A00), onAlmost = Color(0xFFFFE08A),
     done = Color(0xFF7A1A12), onDone = Color(0xFFFFDAD4),
     ok = Color(0xFF5BD47A), wait = Color(0xFFFFC14D), off = Color(0xFF8A8580),
+    lines = listOf(
+        Color(0xFFFF8A4C), Color(0xFF4FD3E8), Color(0xFFC7A4FF),
+        Color(0xFF9BE07A), Color(0xFFFFD25C), Color(0xFFFF7FA8),
+    ),
 )
 
 private val LightCook = CookColors(
     almost = Color(0xFFFFE9A8), onAlmost = Color(0xFF3B2D00),
     done = Color(0xFFFFD2CB), onDone = Color(0xFF5C0F08),
     ok = Color(0xFF1E8E3E), wait = Color(0xFFB57600), off = Color(0xFF8A8580),
+    lines = listOf(
+        Color(0xFFD35400), Color(0xFF00838F), Color(0xFF6A3FC4),
+        Color(0xFF2E7D32), Color(0xFFB58100), Color(0xFFC2185B),
+    ),
 )
 
 val LocalCookColors = staticCompositionLocalOf { DarkCook }
