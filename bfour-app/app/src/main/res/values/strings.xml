@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BFOUR Термо</string>
+
+    <string name="link_idle">Мониторинг выключен</string>
+    <string name="link_bt_off">Bluetooth выключен</string>
+    <string name="link_searching">Ищу термометр…</string>
+    <string name="link_connecting">Подключаюсь…</string>
+    <string name="link_connected">Подключено</string>
+
+    <string name="hint_searching">Включите термометр и держите телефон рядом с ним</string>
+    <string name="hint_lost">Связь пропала. Подойдите ближе к термометру, я переподключусь сам.</string>
+    <string name="action_enable_bt">Включить Bluetooth</string>
+    <string name="action_start">Начать</string>
+
+    <string name="probe_black">Чёрный щуп</string>
+    <string name="probe_white">Белый щуп</string>
+    <string name="probe_n">Щуп %d</string>
+    <string name="probe_absent">Щуп не подключён</string>
+
+    <string name="set_target">Задать цель</string>
+    <string name="target_fmt">Цель %1$s</string>
+    <string name="eta_min">≈ %d мин</string>
+    <string name="eta_hours">≈ %1$d ч %2$d мин</string>
+    <string name="state_done">Готово</string>
+    <string name="state_almost">Почти</string>
+
+    <string name="sheet_title">Цель: %s</string>
+    <string name="sheet_custom">Своя температура</string>
+    <string name="save">Сохранить</string>
+    <string name="clear_target">Убрать цель</string>
+    <string name="minus">Меньше</string>
+    <string name="plus">Больше</string>
+
+    <string name="alarm_title">Готово!</string>
+    <string name="alarm_stop">Остановить</string>
+
+    <string name="menu">Меню</string>
+    <string name="menu_unit_c">Показывать в °C</string>
+    <string name="menu_unit_f">Показывать в °F</string>
+    <string name="menu_forget">Забыть термометр</string>
+    <string name="menu_shutdown">Завершить мониторинг</string>
+
+    <string name="perm_title">Нужен доступ к Bluetooth</string>
+    <string name="perm_text">Через Bluetooth приложение видит термометр, а уведомления нужны, чтобы разбудить вас, когда мясо готово.</string>
+    <string name="perm_grant">Разрешить</string>
+    <string name="perm_settings">Открыть настройки</string>
+
+    <string name="ch_status">Статус</string>
+    <string name="ch_alarm">Сигнал готовности</string>
+    <string name="ch_alerts">Предупреждения</string>
+    <string name="notif_almost_title">Почти готово</string>
+    <string name="notif_almost_text">%1$s: %2$s из %3$s</string>
+    <string name="notif_done_text">%1$s: %2$s (цель %3$s)</string>
+    <string name="notif_lost_title">Нет связи с термометром</string>
+    <string name="notif_lost_text">Подойдите ближе, я переподключусь сам</string>
+    <string name="notif_shutdown">Завершить</string>
+    <string name="no_value">—</string>
+</resources>
