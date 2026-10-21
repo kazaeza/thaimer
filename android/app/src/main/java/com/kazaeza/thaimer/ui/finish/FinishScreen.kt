@@ -58,6 +58,7 @@ fun FinishScreen(session: Session, onDone: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
+            .background(p.background)
             .background(Brush.verticalGradient(listOf(p.accent.copy(alpha = 0.28f), p.background, p.background))),
     ) {
         Column(

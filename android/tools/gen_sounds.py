@@ -7,8 +7,8 @@ Everything is generated (no samples), so the sounds are reproducible and license
 bell      – one strike of a boxing-ring bell: round start
 bell_end  – three strikes: round over / workout over
 clapper   – two wooden knocks: 10 seconds left in the round
-pip       – short beep: 3-2-1 countdown
-go        – long higher beep: next interval inside a round
+pip       – soft short blip: 3-2-1 countdown
+go        – soft "ding": next interval inside a round
 burst     – double referee-whistle blast: explosion!
 """
 import pathlib
@@ -108,12 +108,22 @@ def tone(seconds, freq, attack=0.004, release=0.03):
     return ramp(sig, attack, release)
 
 
+def struck(seconds, freq, decay, partials=((1.0, 1.0), (2.0, 0.12), (3.0, 0.03))):
+    """A tone that is hit and dies away, like a small marimba bar: no shrill sustained beep."""
+    t = t_axis(seconds)
+    sig = sum(a * np.sin(2 * np.pi * freq * r * t) * np.exp(-t * r / decay) for r, a in partials)
+    return ramp(sig, attack=0.006, release=0.03)
+
+
 def pip():
-    return normalize(tone(0.12, 1046.5), 0.5)  # C6
+    return normalize(struck(0.16, 880.0, 0.07), 0.55)  # A5, a soft blip
 
 
 def go():
-    return normalize(tone(0.42, 1568.0, release=0.08), 0.6)  # G6, the "4th beep" after 3-2-1
+    # Two quick notes a fifth apart (E5 → B5): "next!" without the ear-piercing sustain.
+    first = struck(0.22, 659.3, 0.11)
+    second = struck(0.45, 987.8, 0.16)
+    return normalize(place(0.55, (0.0, first * 0.8), (0.09, second)), 0.6)
 
 
 def whistle_blast(seconds):
@@ -132,8 +142,13 @@ def burst():
     return normalize(place(0.72, (0.0, whistle_blast(0.22)), (0.29, whistle_blast(0.42))), 0.85)
 
 
+LEAD_IN = 0.04
+
+
 def write(name, signal):
-    pcm = np.clip(signal, -1, 1)
+    # A sliver of silence up front: when the audio output wakes from standby its first
+    # milliseconds can be swallowed or pop, and that must not be the start of the beep.
+    pcm = np.clip(np.concatenate([np.zeros(int(LEAD_IN * RATE)), signal]), -1, 1)
     data = (pcm * 32767).astype("<i2").tobytes()
     path = OUT / f"{name}.wav"
     with wave.open(str(path), "wb") as w:

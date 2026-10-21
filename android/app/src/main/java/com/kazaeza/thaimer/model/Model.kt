@@ -2,8 +2,11 @@ package com.kazaeza.thaimer.model
 
 /** What an interval asks of you. Drives its colour, icon and the sound that announces it. */
 enum class Kind {
-    PREP, WARMUP, HANDS, LEGS, CLINCH, FIGHT, BURST, PRESSURE, CARDIO, STRENGTH, REST, COOLDOWN
+    PREP, WARMUP, HANDS, LEGS, CLINCH, FIGHT, BURST, PRESSURE, CARDIO, STRENGTH, REST, FLOW, COOLDOWN
 }
+
+/** What a workout mainly builds; shown as tags on the cards. */
+enum class Focus { BREATH, SPARRING, TECHNIQUE, SPEED, STRENGTH, RECOVERY }
 
 enum class BlockType { PREP, WARMUP, ROUND, REST, FINISHER, COOLDOWN }
 
@@ -67,9 +70,15 @@ data class Workout(
     val emoji: String,
     /** 1 (easy) … 5 (brutal). */
     val intensity: Int,
+    val focus: List<Focus>,
     val blocks: List<Block>,
+    /** Kit beyond a bit of floor, e.g. a pull-up bar. */
+    val equipment: String = "",
 ) {
     val seconds: Int get() = blocks.sumOf { it.seconds }
     val rounds: Int get() = blocks.count { it.type == BlockType.ROUND }
     val hasRandomBursts: Boolean get() = blocks.any { b -> b.parts.any { it is Part.Sparring } }
 }
+
+/** A loose section of the workout list. */
+data class WorkoutGroup(val title: String, val workouts: List<Workout>)

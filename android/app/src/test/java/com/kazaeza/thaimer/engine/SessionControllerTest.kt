@@ -31,15 +31,18 @@ class SessionControllerTest {
 
     private val classic = Workouts.byId("classic")!!
 
-    private fun TestScope.controller(onFinished: (Session) -> Unit = {}): Pair<SessionController, RecordingSink> {
+    private fun TestScope.controller(
+        headStartMs: Long = 0,
+        onFinished: (Session) -> Unit = {},
+    ): Pair<SessionController, RecordingSink> {
         val sink = RecordingSink().also { it.now = { testScheduler.currentTime } }
-        return SessionController(backgroundScope, sink, { testScheduler.currentTime }, onFinished) to sink
+        return SessionController(backgroundScope, sink, { testScheduler.currentTime }, headStartMs, onFinished) to sink
     }
 
     @Test
     fun `cues fire on time through the whole workout`() = runTest {
         var finished: Session? = null
-        val (c, sink) = controller { finished = it }
+        val (c, sink) = controller(onFinished = { finished = it })
         c.start(classic, prepSeconds = 10, tenSecondWarning = true, seed = 1)
         runCurrent()
         assertEquals(0L, sink.played.single().first)
@@ -106,14 +109,56 @@ class SessionControllerTest {
         c.next()
         val heard = sink.played.size
         c.resume()
+        runCurrent()
         assertEquals(heard + 1, sink.played.size)
         assertEquals(c.state.value!!.timeline.segments[1].startMs, sink.played.last().second.atMs)
     }
 
     @Test
+    fun `start and resume give a silent head start before the clock moves`() = runTest {
+        val (c, sink) = controller(headStartMs = 2_000)
+        c.start(classic, 10, true, seed = 1)
+        runCurrent()
+        assertTrue(sink.played.isEmpty())
+        assertEquals(2_000, c.state.value!!.startsInMs(testScheduler.currentTime))
+        advanceTimeBy(1_999); runCurrent()
+        assertTrue(sink.played.isEmpty())
+        assertEquals(0, c.state.value!!.elapsedAt(testScheduler.currentTime))
+        advanceTimeBy(1); runCurrent()
+        assertEquals(1, sink.played.size)
+        assertEquals(2_000L, sink.played.single().first)
+
+        advanceTimeBy(5_000); runCurrent()
+        c.pause()
+        assertEquals(5_000, c.state.value!!.elapsedAt(testScheduler.currentTime))
+        c.resume()
+        advanceTimeBy(1_500); runCurrent()
+        assertEquals(5_000, c.state.value!!.elapsedAt(testScheduler.currentTime)) // still waiting
+        advanceTimeBy(5_500); runCurrent()
+        // 2 s head start, then 5 s more on the clock: prep (10 s) is over and the warm-up began.
+        assertEquals(10_000, c.state.value!!.elapsedAt(testScheduler.currentTime))
+        assertEquals(1, c.state.value!!.segment)
+        assertEquals(10_000L, c.state.value!!.workedMs + (testScheduler.currentTime - c.state.value!!.anchorMs))
+    }
+
+    @Test
+    fun `pausing during the head start keeps the clock at zero`() = runTest {
+        val (c, sink) = controller(headStartMs = 2_000)
+        c.start(classic, 10, true, seed = 1)
+        advanceTimeBy(1_000); runCurrent()
+        c.togglePause()
+        advanceTimeBy(30_000); runCurrent()
+        val s = c.state.value!!
+        assertFalse(s.running)
+        assertEquals(0, s.elapsedAt(testScheduler.currentTime))
+        assertEquals(0, s.workedMs)
+        assertTrue(sink.played.isEmpty())
+    }
+
+    @Test
     fun `next from the last interval finishes`() = runTest {
         var done = false
-        val (c, sink) = controller { done = true }
+        val (c, sink) = controller(onFinished = { done = true })
         c.start(classic, 10, true, seed = 1)
         c.jumpTo(c.state.value!!.timeline.segments.lastIndex)
         c.next()

@@ -57,8 +57,8 @@ class CuePlayer(context: Context, private val settings: () -> Settings) : CueSin
         Sound.PIP to pool.load(app, R.raw.pip, 1),
     )
     private val soundLengthMs = mapOf(
-        Sound.BELL to 2_400L, Sound.BELL_END to 3_000L, Sound.CLAPPER to 320L,
-        Sound.BURST to 720L, Sound.GO to 420L, Sound.PIP to 120L,
+        Sound.BELL to 2_440L, Sound.BELL_END to 3_040L, Sound.CLAPPER to 360L,
+        Sound.BURST to 760L, Sound.GO to 590L, Sound.PIP to 200L,
     )
     private val streams = ArrayDeque<Int>()
 
@@ -99,8 +99,21 @@ class CuePlayer(context: Context, private val settings: () -> Settings) : CueSin
         tts = TextToSpeech(app) { status -> main.post { onTtsReady(status) } }
     }
 
-    /** Retry after the user installed a Russian voice. */
-    fun reloadVoice() {
+    private var voiceInstallPending = false
+
+    /** The user is off to the system screen to download a Russian voice. */
+    fun expectVoiceInstall() {
+        voiceInstallPending = true
+    }
+
+    /** On return to the app: re-bind the engine once if a voice was being installed. */
+    fun refreshIfMissing() {
+        if (!voiceInstallPending) return
+        voiceInstallPending = false
+        if (_voiceStatus.value == VoiceStatus.MISSING_RUSSIAN || _voiceStatus.value == VoiceStatus.UNAVAILABLE) reloadVoice()
+    }
+
+    private fun reloadVoice() {
         tts?.shutdown()
         tts = null
         warmUp()

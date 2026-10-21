@@ -41,6 +41,7 @@ import com.kazaeza.thaimer.model.Kind
 import com.kazaeza.thaimer.model.Workout
 import com.kazaeza.thaimer.ui.components.AppIcons
 import com.kazaeza.thaimer.ui.components.DurationPill
+import com.kazaeza.thaimer.ui.components.FocusChips
 import com.kazaeza.thaimer.ui.components.IntensityBars
 import com.kazaeza.thaimer.ui.components.KindDot
 import com.kazaeza.thaimer.ui.components.RoundIconButton
@@ -105,6 +106,7 @@ private fun Header(workout: Workout) {
             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
         )
         Text(workout.tagline, style = Type.body, color = p.muted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+        FocusChips(workout, Modifier.fillMaxWidth().padding(top = 12.dp), centered = true)
     }
 }
 

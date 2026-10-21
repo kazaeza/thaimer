@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="window_background">#FFF5F5F7</color>
+    <!-- The app opens on the dark fire intro, so the system splash is dark in both themes. -->
+    <color name="splash_background">#FF0B0B0E</color>
     <color name="icon_background">#FF121216</color>
 </resources>

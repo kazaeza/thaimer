@@ -11,6 +11,7 @@ import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -77,6 +78,7 @@ import com.kazaeza.thaimer.ui.theme.Type
 import com.kazaeza.thaimer.ui.theme.color
 import com.kazaeza.thaimer.ui.theme.emoji
 import com.kazaeza.thaimer.ui.theme.kindColor
+import kotlin.math.ceil
 
 data class SessionActions(
     val onToggle: () -> Unit,
@@ -105,6 +107,7 @@ fun SessionScreen(session: Session, soundOn: Boolean, actions: SessionActions) {
         onClose = { confirmExit = true },
         onPlan = { showPlan = true },
         actions = actions,
+        startsInMs = session.startsInMs(now),
     )
 
     if (showPlan) {
@@ -163,6 +166,7 @@ fun SessionContent(
     onClose: () -> Unit,
     onPlan: () -> Unit,
     actions: SessionActions,
+    startsInMs: Long = 0,
 ) {
     val p = Thaimer.palette
     val index = timeline.indexAt(elapsedMs)
@@ -172,7 +176,7 @@ fun SessionContent(
     val round = timeline.blocks.lastOrNull { it.type == BlockType.ROUND && it.startMs <= elapsedMs }?.round ?: 0
 
     Box(Modifier.fillMaxSize().background(p.background)) {
-        if (step.kind == Kind.BURST && running) BurstGlow(stepColor)
+        if (step.kind == Kind.BURST && running && startsInMs == 0L) BurstGlow(stepColor)
         Column(
             Modifier
                 .fillMaxSize()
@@ -206,9 +210,22 @@ fun SessionContent(
                 ) {
                     NextUp(timeline, index, Modifier.height(nextUpHeight))
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.size(side), contentAlignment = Alignment.Center) {
+                    // The whole dial is a pause / play button: easy to hit from a step away.
+                    Box(
+                        Modifier
+                            .size(side)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                role = Role.Button,
+                                onClickLabel = if (running) "Пауза" else "Старт",
+                                onClick = actions.onToggle,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         SessionRings(timeline, elapsedMs, segment, Modifier.fillMaxSize().alpha(if (running) 1f else 0.55f))
-                        RingCenter(timeline, segment, elapsedMs, running, Modifier.width(side * 0.6f))
+                        RingCenter(timeline, segment, elapsedMs, running, startsInMs, Modifier.width(side * 0.6f))
                     }
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -294,56 +311,32 @@ private fun NextUp(timeline: Timeline, index: Int, modifier: Modifier = Modifier
     }
 }
 
+/**
+ * Two rings: the outer one is the whole workout block by block (done blocks fade, the dot is
+ * "you are here"), the thick inner one is what is left of the current countdown.
+ */
 @Composable
 private fun SessionRings(timeline: Timeline, elapsedMs: Long, segment: Segment, modifier: Modifier) {
     val p = Thaimer.palette
     val dark = p.dark
-    val block = timeline.blockOf(segment)
-    val secret = block.index in timeline.secretBlocks
     Canvas(modifier) {
-        val outerW = 7.dp.toPx()
-        val midW = 7.dp.toPx()
-        val innerW = 17.dp.toPx()
-        val gap = 6.dp.toPx()
+        val outerW = 10.dp.toPx()
+        val innerW = 18.dp.toPx()
+        val gap = 12.dp.toPx()
 
-        // Outer: the whole workout, block by block. Done blocks fade.
         val total = timeline.totalMs.toFloat()
         val progress = elapsedMs / total
         timeline.blocks.forEach { b ->
             drawSplitArc(b.startMs / total, b.durationMs / total, progress, b.kind.color(dark), outerW, 0f, 1.4f)
         }
-        // Position marker on the outer ring.
         val r = size.minDimension / 2 - outerW / 2
         val angle = Math.toRadians((progress * 360f - 90f).toDouble())
         val marker = Offset(center.x + r * kotlin.math.cos(angle).toFloat(), center.y + r * kotlin.math.sin(angle).toFloat())
-        drawCircle(p.background, radius = outerW * 0.95f, center = marker)
-        drawCircle(p.text, radius = outerW * 0.62f, center = marker)
+        drawCircle(p.background, radius = outerW * 0.9f, center = marker)
+        drawCircle(p.text, radius = outerW * 0.55f, center = marker)
 
-        // Middle: the current block, interval by interval. A sparring round keeps its future secret.
-        val midInset = outerW + gap
-        val bStart = block.startMs
-        val bLen = block.durationMs.toFloat()
-        val blockProgress = (elapsedMs - bStart) / bLen
-        val hideFrom = when {
-            !secret -> Long.MAX_VALUE
-            timeline.isMasked(segment) -> segment.startMs
-            else -> segment.endMs
-        }
-        block.segments.map { timeline.segments[it] }.filter { it.startMs < hideFrom }.forEach { s ->
-            drawSplitArc(
-                (s.startMs - bStart) / bLen, s.durationMs / bLen, blockProgress,
-                s.step.kind.color(dark), midW, midInset, if (block.segments.count() > 1) 1.4f else 0f,
-            )
-        }
-        if (hideFrom < block.endMs) {
-            drawSplitArc(
-                (hideFrom - bStart) / bLen, (block.endMs - hideFrom) / bLen, blockProgress,
-                Kind.FIGHT.color(dark), midW, midInset, 1.4f,
-            )
-        }
-
-        // Inner: what's left of the current countdown, sweeping away clockwise.
-        val innerInset = outerW + gap + midW + gap * 1.7f
+        // Counts down to the bell instead of the interval's end when the next interval is an ambush.
+        val innerInset = outerW + gap
         drawRingArc(0f, 1f, p.track, innerW, inset = innerInset)
         val target = timeline.countdownTarget(segment)
         val span = (target - segment.startMs).toFloat()
@@ -374,7 +367,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSplitArc(
 }
 
 @Composable
-private fun RingCenter(timeline: Timeline, segment: Segment, elapsedMs: Long, running: Boolean, modifier: Modifier) {
+private fun RingCenter(timeline: Timeline, segment: Segment, elapsedMs: Long, running: Boolean, startsInMs: Long, modifier: Modifier) {
     val p = Thaimer.palette
     val block = timeline.blockOf(segment)
     val step = segment.step
@@ -388,7 +381,8 @@ private fun RingCenter(timeline: Timeline, segment: Segment, elapsedMs: Long, ru
     val masked = timeline.isMasked(segment)
     val target = timeline.countdownTarget(segment)
     val remaining = target - elapsedMs
-    val finalSeconds = running && !masked && remaining in 1..3_000
+    val headStart = running && startsInMs > 0
+    val finalSeconds = running && !headStart && !masked && remaining in 1..3_000
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             caption.uppercase(), style = Type.label, color = p.muted, maxLines = 1,
@@ -404,18 +398,28 @@ private fun RingCenter(timeline: Timeline, segment: Segment, elapsedMs: Long, ru
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        MonoText(
-            remainingClock(remaining),
-            Type.hero.copy(fontSize = 62.sp, lineHeight = 66.sp),
-            if (finalSeconds) kindColor(step.kind) else p.text,
-        )
+        if (headStart) {
+            // Silent head start after start / resume: a big countdown, no sounds.
+            MonoText(
+                ceil(startsInMs / 1000.0).toInt().toString(),
+                Type.hero.copy(fontSize = 62.sp, lineHeight = 66.sp),
+                p.accent,
+            )
+        } else {
+            MonoText(
+                remainingClock(remaining),
+                Type.hero.copy(fontSize = 62.sp, lineHeight = 66.sp),
+                if (finalSeconds) kindColor(step.kind) else p.text,
+            )
+        }
         Text(
             when {
-                !running -> "ПАУЗА"
+                !running -> "ПАУЗА · НАЖМИ"
+                headStart -> "ДО СТАРТА"
                 masked -> "ДО ГОНГА"
                 else -> " "
             },
-            style = Type.label, color = if (!running) p.accent else p.muted,
+            style = Type.label, color = if (!running || headStart) p.accent else p.muted,
         )
     }
 }

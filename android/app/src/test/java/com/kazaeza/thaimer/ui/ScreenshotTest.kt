@@ -19,6 +19,7 @@ import com.kazaeza.thaimer.model.TimelineBuilder
 import com.kazaeza.thaimer.ui.detail.DetailScreen
 import com.kazaeza.thaimer.ui.finish.FinishScreen
 import com.kazaeza.thaimer.ui.home.HomeScreen
+import com.kazaeza.thaimer.ui.intro.IntroScreen
 import com.kazaeza.thaimer.ui.session.PlanSheet
 import com.kazaeza.thaimer.ui.session.SessionActions
 import com.kazaeza.thaimer.ui.session.SessionContent
@@ -91,11 +92,11 @@ class ScreenshotTest {
     )
 
     @Test fun home_light() = shoot("01_home_light", false) {
-        HomeScreen(Workouts.all, stats, {}, {}, now = now)
+        HomeScreen(Workouts.groups, stats, {}, {}, now = now)
     }
 
     @Test fun home_dark() = shoot("02_home_dark", true) {
-        HomeScreen(Workouts.all, stats, {}, {}, now = now)
+        HomeScreen(Workouts.groups, stats, {}, {}, now = now)
     }
 
     @Test fun detail_sparring_light() = shoot("03_detail_sparring_light", false) {
@@ -153,6 +154,20 @@ class ScreenshotTest {
 
     @Test fun settings_sheet_light() = shoot("11_settings_light", false, rootIndex = 1) {
         SettingsSheet(Settings(), VoiceStatus.MISSING_RUSSIAN, {}, {}, {})
+    }
+
+    @Test fun intro() = shoot("00_intro", true) { IntroScreen {} }
+
+    @Test fun detail_third_minute_dark() = shoot("13_detail_third_minute_dark", true) {
+        DetailScreen(Workouts.byId("third-minute")!!, Settings(), {}, {})
+    }
+
+    @Test fun session_head_start_light() {
+        val t = timeline("third-minute")
+        val round = t.blocks.first { it.type == com.kazaeza.thaimer.model.BlockType.ROUND }
+        shoot("14_session_head_start_light", false) {
+            SessionContent(t, round.startMs + 30_000, running = true, soundOn = true, onClose = {}, onPlan = {}, actions = noop, startsInMs = 1_400)
+        }
     }
 
     @Test fun launcher_icon() {

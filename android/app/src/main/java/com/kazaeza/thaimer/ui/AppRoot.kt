@@ -14,12 +14,16 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,11 +35,13 @@ import com.kazaeza.thaimer.model.Workout
 import com.kazaeza.thaimer.ui.detail.DetailScreen
 import com.kazaeza.thaimer.ui.finish.FinishScreen
 import com.kazaeza.thaimer.ui.home.HomeScreen
+import com.kazaeza.thaimer.ui.intro.IntroScreen
 import com.kazaeza.thaimer.ui.session.SessionActions
 import com.kazaeza.thaimer.ui.session.SessionScreen
 import com.kazaeza.thaimer.ui.settings.SettingsSheet
+import com.kazaeza.thaimer.ui.theme.Thaimer
 
-private enum class Screen { HOME, DETAIL, SESSION, FINISH }
+private enum class Screen { INTRO, HOME, DETAIL, SESSION, FINISH }
 
 @Composable
 fun AppRoot(app: ThaimerApp) {
@@ -48,6 +54,8 @@ fun AppRoot(app: ThaimerApp) {
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var pendingStart by rememberSaveable { mutableStateOf<String?>(null) }
+    // Once per launch; survives rotation and theme changes, skipped if a workout is already on.
+    var showIntro by rememberSaveable { mutableStateOf(true) }
 
     fun begin(workout: Workout) = app.startWorkout(context, workout)
 
@@ -69,7 +77,9 @@ fun AppRoot(app: ThaimerApp) {
     }
 
     val current = session
+    LaunchedEffect(current != null) { if (current != null) showIntro = false }
     val screen = when {
+        showIntro && current == null -> Screen.INTRO
         current?.finished == true -> Screen.FINISH
         current != null -> Screen.SESSION
         openId?.let(Workouts::byId) != null -> Screen.DETAIL
@@ -98,12 +108,18 @@ fun AppRoot(app: ThaimerApp) {
 
     AnimatedContent(
         targetState = screen,
-        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+        // Opaque floor under the cross-fade, so the dark window never shows through mid-fade.
+        modifier = Modifier.fillMaxSize().background(Thaimer.palette.background),
+        transitionSpec = {
+            if (initialState == Screen.INTRO) fadeIn(tween(450)) togetherWith fadeOut(tween(450))
+            else fadeIn(tween(220)) togetherWith fadeOut(tween(160))
+        },
         label = "screen",
     ) { target ->
         when (target) {
+            Screen.INTRO -> IntroScreen(onDone = { showIntro = false })
             Screen.HOME -> HomeScreen(
-                workouts = Workouts.all,
+                groups = Workouts.groups,
                 stats = stats,
                 onOpen = { openId = it.id },
                 onSettings = { showSettings = true },
@@ -138,13 +154,13 @@ fun AppRoot(app: ThaimerApp) {
             voiceStatus = voiceStatus,
             onChange = app.prefs::update,
             onFixVoice = {
+                app.player.expectVoiceInstall()
                 val intent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 try {
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
                     context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
-                app.player.reloadVoice()
             },
             onDismiss = { showSettings = false },
         )

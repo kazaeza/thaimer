@@ -52,7 +52,8 @@ class SessionNotifier(private val context: Context) {
         }
 
         val timeline = session.timeline
-        val elapsed = session.elapsedAt(SystemClock.elapsedRealtime())
+        val now = SystemClock.elapsedRealtime()
+        val elapsed = session.elapsedAt(now)
         val segment = timeline.segments[timeline.indexAt(elapsed)]
         val block = timeline.blockOf(segment)
         val title = buildString {
@@ -71,7 +72,7 @@ class SessionNotifier(private val context: Context) {
             builder.setUsesChronometer(true)
                 .setChronometerCountDown(true)
                 .setShowWhen(true)
-                .setWhen(System.currentTimeMillis() + (timeline.countdownTarget(segment) - elapsed))
+                .setWhen(System.currentTimeMillis() + session.startsInMs(now) + (timeline.countdownTarget(segment) - elapsed))
         } else {
             builder.setShowWhen(false)
         }

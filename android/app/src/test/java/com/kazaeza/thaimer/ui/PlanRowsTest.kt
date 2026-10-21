@@ -20,9 +20,9 @@ class PlanRowsTest {
     fun `identical circuits fold into one header`() {
         val rows = planRows(Workouts.byId("camp")!!)
         val header = rows.filterIsInstance<PlanRow.Header>().single { it.times > 1 }
-        assertEquals("Раунды 1–4 · Круговая", header.title)
-        assertEquals(4, header.times)
-        assertEquals(60, header.restBetween)
+        assertEquals("Раунды 1–5 · Круг без пауз", header.title)
+        assertEquals(5, header.times)
+        assertEquals(45, header.restBetween)
     }
 
     @Test

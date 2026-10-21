@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.kazaeza.thaimer.R
+import com.kazaeza.thaimer.model.Focus
 import com.kazaeza.thaimer.model.Kind
 
 @Immutable
@@ -80,6 +81,7 @@ fun Kind.color(dark: Boolean): Color = when (this) {
     Kind.CARDIO -> if (dark) Color(0xFFF472B6) else Color(0xFFDB2777)
     Kind.STRENGTH -> if (dark) Color(0xFF818CF8) else Color(0xFF4F46E5)
     Kind.REST -> if (dark) Color(0xFF60A5FA) else Color(0xFF2563EB)
+    Kind.FLOW -> if (dark) Color(0xFFA3B1C6) else Color(0xFF5B6B85)
     Kind.COOLDOWN -> if (dark) Color(0xFF4ADE80) else Color(0xFF16A34A)
 }
 
@@ -96,8 +98,39 @@ val Kind.emoji: String
         Kind.CARDIO -> "🔥"
         Kind.STRENGTH -> "💪"
         Kind.REST -> "💨"
+        Kind.FLOW -> "😌"
         Kind.COOLDOWN -> "🧘"
     }
+
+val Focus.label: String
+    get() = when (this) {
+        Focus.BREATH -> "Дыхалка"
+        Focus.SPARRING -> "Спарринг"
+        Focus.TECHNIQUE -> "Техника"
+        Focus.SPEED -> "Скорость"
+        Focus.STRENGTH -> "Сила"
+        Focus.RECOVERY -> "Восстановление"
+    }
+
+val Focus.emoji: String
+    get() = when (this) {
+        Focus.BREATH -> "🌬️"
+        Focus.SPARRING -> "🥊"
+        Focus.TECHNIQUE -> "🎯"
+        Focus.SPEED -> "⚡"
+        Focus.STRENGTH -> "💪"
+        Focus.RECOVERY -> "🧘"
+    }
+
+/** Fire palette for the intro and the home hero; the same in light and dark themes. */
+object Fire {
+    val night = Color(0xFF0B0B0E)
+    val ember = Color(0xFF1C0D07)
+    val red = Color(0xFFE0161B)
+    val orange = Color(0xFFFF6A00)
+    val gold = Color(0xFFFFB627)
+    val core = Color(0xFFFFE89A)
+}
 
 @Composable
 @ReadOnlyComposable

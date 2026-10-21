@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,8 @@ import com.kazaeza.thaimer.ui.theme.Oswald
 import com.kazaeza.thaimer.ui.theme.Thaimer
 import com.kazaeza.thaimer.ui.theme.Type
 import com.kazaeza.thaimer.ui.theme.color
+import com.kazaeza.thaimer.ui.theme.emoji
+import com.kazaeza.thaimer.ui.theme.label
 import kotlin.random.Random
 
 /**
@@ -93,6 +96,34 @@ fun DurationPill(text: String, color: Color, modifier: Modifier = Modifier) {
         val ink = if (Thaimer.palette.dark) Color(0xFF111114) else Color.White
         Text(text, style = TextStyle(fontFamily = Oswald, fontSize = 15.sp, letterSpacing = 0.5.sp), color = ink, maxLines = 1)
     }
+}
+
+/** What the workout builds, plus any kit it needs. */
+@Composable
+fun FocusChips(workout: Workout, modifier: Modifier = Modifier, centered: Boolean = false) {
+    FlowRow(
+        modifier,
+        horizontalArrangement = if (centered) Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally) else Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        workout.focus.forEach { Chip("${it.emoji} ${it.label}") }
+        if (workout.equipment.isNotBlank()) Chip("🏋️ нужен ${workout.equipment}")
+    }
+}
+
+@Composable
+private fun Chip(text: String) {
+    val p = Thaimer.palette
+    Text(
+        text,
+        style = Type.small.copy(fontSize = 12.sp),
+        color = p.text,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(p.surfaceAlt)
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+    )
 }
 
 /** Five rising bars, filled up to the workout's intensity. */

@@ -33,7 +33,8 @@ object CueBuilder {
             if (segment.durationMs >= 6_000 && next?.step?.surprise != true) {
                 for (n in 3 downTo 1) raw += Cue(segment.endMs - n * 1000L, sound = Sound.PIP)
             }
-            if (segment.step.kind == Kind.REST && segment.durationMs >= 20_000 && next != null) {
+            // Heads-up only in proper rests; a short transition would hear the same name twice.
+            if (segment.step.kind == Kind.REST && segment.durationMs >= 30_000 && next != null) {
                 val upcoming = upcomingName(timeline, next, opensBlock = next.block != segment.block)
                     ?.let { " Дальше — $it." }.orEmpty()
                 raw += Cue(segment.endMs - 10_000, speech = "Приготовься.$upcoming")
@@ -55,6 +56,7 @@ object CueBuilder {
         val closesRound = opensBlock && previous != null && timeline.blockOf(previous).type == BlockType.ROUND
         val opensRound = opensBlock && block.type == BlockType.ROUND
         val sound = when {
+            previous == null -> null // the session opens with the voice alone, no beep in the face
             opensRound -> Sound.BELL
             closesRound -> Sound.BELL_END
             segment.step.kind == Kind.BURST -> Sound.BURST
@@ -103,4 +105,4 @@ object CueBuilder {
 
 private fun String.sentence(): String = trim().let { if (it.last() in ".!?…") it else "$it." }
 
-private fun String.lowercaseFirst(): String = replaceFirstChar { it.lowercaseChar() }
+internal fun String.lowercaseFirst(): String = replaceFirstChar { it.lowercaseChar() }

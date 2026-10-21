@@ -3,12 +3,14 @@ package com.kazaeza.thaimer.data
 import com.kazaeza.thaimer.model.Block
 import com.kazaeza.thaimer.model.BlockType
 import com.kazaeza.thaimer.model.Burst
+import com.kazaeza.thaimer.model.Focus
 import com.kazaeza.thaimer.model.Kind
 import com.kazaeza.thaimer.model.Kind.BURST
 import com.kazaeza.thaimer.model.Kind.CARDIO
 import com.kazaeza.thaimer.model.Kind.CLINCH
 import com.kazaeza.thaimer.model.Kind.COOLDOWN
 import com.kazaeza.thaimer.model.Kind.FIGHT
+import com.kazaeza.thaimer.model.Kind.FLOW
 import com.kazaeza.thaimer.model.Kind.HANDS
 import com.kazaeza.thaimer.model.Kind.LEGS
 import com.kazaeza.thaimer.model.Kind.PRESSURE
@@ -18,23 +20,20 @@ import com.kazaeza.thaimer.model.Kind.WARMUP
 import com.kazaeza.thaimer.model.Part
 import com.kazaeza.thaimer.model.Step
 import com.kazaeza.thaimer.model.Workout
+import com.kazaeza.thaimer.model.WorkoutGroup
+import com.kazaeza.thaimer.model.lowercaseFirst
 
-/** The ten home sessions. Everything works without equipment; a rope or a bag only helps. */
+/** The home sessions. Only "Третья минута" needs kit (a pull-up bar); a rope or a bag just helps. */
 object Workouts {
-    val all: List<Workout> by lazy {
+    val groups: List<WorkoutGroup> by lazy {
         listOf(
-            classic(),
-            sparring(),
-            exhausted(),
-            championship(),
-            kicks(),
-            clinch(),
-            tabata(),
-            ladder(),
-            camp(),
-            recovery(),
+            WorkoutGroup("Дыхалка · через не могу", listOf(sparring(), thirdMinute(), exhausted(), ladder(), camp())),
+            WorkoutGroup("Бой и техника", listOf(championship(), classic(), kicks(), clinch(), tabata())),
+            WorkoutGroup("Лёгкий день", listOf(recovery())),
         )
     }
+
+    val all: List<Workout> by lazy { groups.flatMap { it.workouts } }
 
     fun byId(id: String): Workout? = all.firstOrNull { it.id == id }
 }
@@ -51,7 +50,7 @@ private fun round(title: String, vararg steps: Step) = block(BlockType.ROUND, ti
 
 private fun finisher(title: String, vararg steps: Step) = block(BlockType.FINISHER, title, *steps)
 
-private fun rest(seconds: Int) = block(BlockType.REST, "", s("Отдых", seconds, REST, restHint(seconds)))
+private fun rest(seconds: Int, hint: String = restHint(seconds)) = block(BlockType.REST, "", s("Отдых", seconds, REST, hint))
 
 private fun restHint(seconds: Int) = when {
     seconds >= 90 -> "Ходи, не садись. Глубокий вдох носом — длинный выдох ртом"
@@ -59,12 +58,17 @@ private fun restHint(seconds: Int) = when {
     else -> "Встряхни руки и ноги, выровняй дыхание"
 }
 
+/** Short rest breathed through the nose only: recovery stays incomplete and the air hunger builds. */
+private fun noseRest(seconds: Int) = rest(seconds, "Дыши только носом и ходи. Не садись и не упирайся в колени")
+
 /** A silent breather between exercises; "next up" tells you what is coming. */
 private fun pause(seconds: Int) = s("Переход", seconds, REST, "Выдохни и готовься к следующему", say = "")
 
 /** Rounds with the same rest between each pair. */
-private fun withRests(restSeconds: Int, vararg rounds: Block): List<Block> =
-    rounds.flatMapIndexed { i, round -> if (i == 0) listOf(round) else listOf(rest(restSeconds), round) }
+private fun withRests(rest: Block, vararg rounds: Block): List<Block> =
+    rounds.flatMapIndexed { i, round -> if (i == 0) listOf(round) else listOf(rest, round) }
+
+private fun withRests(restSeconds: Int, vararg rounds: Block): List<Block> = withRests(rest(restSeconds), *rounds)
 
 private fun warmup() = block(
     BlockType.WARMUP, "Разминка",
@@ -81,6 +85,16 @@ private fun quickWarmup() = block(
     s("Прыжки на носках", 60, WARMUP, "Со скакалкой или без. Разгоняй пульс постепенно"),
     s("Махи ногами", 30, WARMUP, "Вперёд-назад и в стороны"),
     s("Бой с тенью вполсилы", 45, WARMUP, "Лёгкие двойки и типы, работай ногами"),
+)
+
+/** Loose shadowboxing to come down from the work, like the last minutes of a gym session. */
+private fun easyShadow(seconds: Int = 180) = block(
+    BlockType.COOLDOWN, "На расслабоне",
+    s(
+        "Бой с тенью на расслабоне", seconds, FLOW,
+        "Плечи и кулаки расслаблены, дыхание носом. Лёгкие удары, плавные уходы",
+        say = "Бой с тенью на расслабоне. Выдохни, расслабь плечи",
+    ),
 )
 
 private fun cooldown() = block(
@@ -146,38 +160,91 @@ private fun ladderRound(title: String, bursts: List<Pair<String, String>>): Bloc
         val (name, hint) = bursts[i % bursts.size]
         listOf(
             s(name, seconds, BURST, hint, say = "$seconds секунд! $name!"),
-            s("Восстановление в движении", 60 - seconds, PRESSURE, "Джеб, работа ног, дыхание. Не стой на месте", say = "Восстановление"),
+            s("Восстановление носом", 60 - seconds, PRESSURE, "Рот закрыт: джеб, работа ног. Не стой на месте", say = "Восстановление. Только носом"),
         )
     }
     return Block(title, BlockType.ROUND, steps.map { Part.Fixed(it) })
 }
 
+/** Six exercises back to back, 30 s each, no transitions: a three-minute round of pure work. */
 private fun campCircuit() = round(
-    "Круговая",
-    s("Отжимания", 40, STRENGTH, "Грудь до пола, корпус — доска"),
-    pause(15),
-    s("Тайские скручивания", 40, STRENGTH, "Полный подъём корпуса, кулаки у подбородка"),
-    pause(15),
-    s("Выпрыгивания", 40, CARDIO, "Присед — взрывной прыжок — мягкое приземление"),
-    pause(15),
-    s("Прямые на скорость", 40, HANDS, "Джеб-кросс без остановки, работают плечи"),
-    pause(15),
-    s("Скалолаз", 40, CARDIO, "Колени к груди в упоре лёжа, быстро"),
-    pause(15),
-    s("Колени со сменой ног", 40, CLINCH, "Прыжком меняй ноги, колено до груди"),
+    "Круг без пауз",
+    s("Бёрпи", 30, CARDIO, "Упал — отжался — встал — прыжок. Без остановок", say = "Бёрпи!"),
+    s("Отжимания", 30, STRENGTH, "Грудь до пола, корпус — доска. Не можешь — с колен, но не стой"),
+    s("Град ударов", 30, BURST, "Прямые на максимальной скорости, руки у лица", say = "Град ударов!"),
+    s("Выпрыгивания", 30, CARDIO, "Присед — взрывной прыжок — мягкое приземление"),
+    s("Тайские скручивания", 30, STRENGTH, "Полный подъём корпуса, кулаки у подбородка"),
+    s("Колени со сменой ног", 30, CLINCH, "Прыжком меняй ноги, колено до груди", say = "Колени!"),
+)
+
+/** The round where the air runs out: pull-ups, burpees, breath-hold combos, a burst, the bar again. */
+private fun thirdMinuteRound(title: String, burst: Burst) = round(
+    title,
+    s("Подтягивания", 30, STRENGTH, "Сколько сможешь. Не тянешь — вис или медленные негативы", say = "Турник! Подтягивания"),
+    s("Бёрпи", 30, CARDIO, "Без пауз: упал — встал — прыжок", say = "Бёрпи!"),
+    s(
+        "Бой с тенью на задержках", 40, PRESSURE,
+        "Выдох — 3–4 удара без вдоха — вдох носом. Кружится голова — дыши обычно",
+        say = "Задержки. Выдохни и бей серию без вдоха",
+    ),
+    s("Взрыв: ${burst.name.lowercaseFirst()}", 20, BURST, burst.hint, say = burst.say),
+    s("Снова турник", 20, STRENGTH, "Хоть одно повторение. Не тянешь — просто висни", say = "Снова турник!"),
+    s("Через не могу", 30, PRESSURE, "Дыхалки нет — а ты работаешь: двойки, колени, движение", say = "Через не могу! Работай!"),
+    finishPush(10),
 )
 
 // endregion
+
+private fun thirdMinute() = Workout(
+    id = "third-minute",
+    title = "Третья минута",
+    emoji = "🥵",
+    intensity = 5,
+    focus = listOf(Focus.BREATH, Focus.STRENGTH),
+    equipment = "турник",
+    tagline = "Турник и работа в кислородном долге — как конец раунда, когда дыхалки нет",
+    description = "Для тех, у кого на третьей минуте раунда кончается дыхалка. В каждом раунде: подтягивания, бёрпи, " +
+        "бой с тенью на задержках дыхания, взрыв — и снова турник, когда руки уже не держат. " +
+        "Отдых 45 секунд, и дышать в нём только носом: полностью не восстановишься, так и задумано. " +
+        "Задача — привыкнуть работать, когда кажется, что уже не можешь ничего. " +
+        "Нужен турник. Если на задержках кружится голова — дыши обычно.",
+    blocks = listOf(
+        warmup(),
+        block(
+            BlockType.WARMUP, "Турник",
+            s("Вис на турнике", 20, STRENGTH, "Просто повисни, плечи активные, не проваливайся", say = "Турник. Вис"),
+            s("Подтягивания лопатками", 30, STRENGTH, "В висе своди и опускай лопатки, руки прямые"),
+            s("Лёгкие подтягивания", 30, STRENGTH, "3–5 спокойных повторов, разогреть спину и хват"),
+        ),
+    ) + withRests(
+        noseRest(45),
+        thirdMinuteRound("Руки", HANDS_BURSTS[0]),
+        thirdMinuteRound("Колени", CLINCH_BURSTS[0]),
+        thirdMinuteRound("Ноги", LEG_BURSTS[0]),
+        thirdMinuteRound("Локти", CLINCH_BURSTS[1]),
+        thirdMinuteRound("Финал", Burst("Всё что есть", "Взрыв! Всё что есть!", "Любые удары на максимум")),
+    ) + listOf(
+        noseRest(45),
+        finisher(
+            "Добивка на турнике",
+            s("Последний подход", 30, STRENGTH, "Подтягивания до отказа, потом негативы", say = "Последний подход! До отказа"),
+            s("Вис до отказа", 45, STRENGTH, "Держись, сколько сможешь, дыши носом"),
+        ),
+        easyShadow(),
+        cooldown(),
+    ),
+)
 
 private fun classic() = Workout(
     id = "classic",
     title = "Тайская классика",
     emoji = "🥊",
     intensity = 3,
+    focus = listOf(Focus.TECHNIQUE, Focus.STRENGTH),
     tagline = "Скакалка, 5 раундов боя с тенью и ОФП — как в зале",
     description = "Обычная тренировка тайского зала, только дома. Раунды по 3 минуты и минута отдыха. " +
         "В каждом раунде свой акцент: руки, ноги, колени и локти, комбинации и свободный бой. " +
-        "В конце — классическая тайская ОФП.",
+        "В конце — классическая тайская ОФП и бой с тенью на расслабоне.",
     blocks = listOf(warmup()) + withRests(
         60,
         round(
@@ -228,6 +295,7 @@ private fun classic() = Workout(
             pause(20),
             s("Планка", 40, STRENGTH, "Живот втянут, поясница не проваливается"),
         ),
+        easyShadow(),
         cooldown(),
     ),
 )
@@ -237,19 +305,20 @@ private fun sparring() = Workout(
     title = "Спарринг: рваный темп",
     emoji = "⚡",
     intensity = 5,
+    focus = listOf(Focus.SPARRING, Focus.BREATH),
     tagline = "Внезапные взрывы в 3-минутных раундах — как в живом спарринге",
     description = "Имитация спарринга, где темп рвёт соперник. Ты работаешь в среднем темпе, и в случайный момент " +
         "звучит свисток: «Взрыв!» — 6–12 секунд на максимуме. После взрыва отдыха нет: «Под давлением» ты двигаешься, " +
         "защищаешься и отвечаешь, пока задыхаешься. Моменты взрывов каждый раз новые — подготовиться не выйдет. " +
-        "С каждым раундом взрывов больше, а в конце раунда — «Добивай!».",
+        "С каждым раундом взрывов больше, в конце раунда — «Добивай!», а отдых всего 45 секунд.",
     blocks = listOf(warmup()) + withRests(
-        60,
+        noseRest(45),
         sparringRound("Разведка", gap = 14..24),
         sparringRound("Разгон", gap = 10..20),
         sparringRound("Пик", gap = 8..15),
         sparringRound("Война", gap = 6..12),
         sparringRound("Финал", gap = 4..9, finish = 15),
-    ) + listOf(cooldown()),
+    ) + listOf(easyShadow(), cooldown()),
 )
 
 private fun exhausted() = Workout(
@@ -257,60 +326,62 @@ private fun exhausted() = Workout(
     title = "Через не могу",
     emoji = "😤",
     intensity = 5,
+    focus = listOf(Focus.BREATH, Focus.TECHNIQUE),
     tagline = "Входишь в раунд уже задыхаясь — и держишь технику",
-    description = "Каждый раунд начинается с 30 секунд работы на износ: бёрпи, спролы, колени, выпрыгивания. " +
+    description = "Каждый раунд начинается с 40 секунд работы на износ: бёрпи, спролы, колени, выпрыгивания. " +
         "Пульс улетает — и тут начинается бой с тенью, где нужно сохранить технику, дыхание и голову, " +
-        "а потом ещё два взрыва. Отдых урезан до 45 секунд: восстановиться полностью не успеешь. " +
+        "а потом ещё два взрыва. Отдых всего 30 секунд и только носом: восстановиться не успеешь. " +
         "Ровно так ощущается третий раунд тяжёлого спарринга.",
     blocks = listOf(warmup()) + withRests(
-        45,
+        noseRest(30),
         round(
             "Бёрпи",
-            s("Бёрпи на износ", 30, CARDIO, "Упал — отжался — встал — прыжок. Без пауз", say = "Бёрпи! На износ!"),
-            s("Техника под усталостью", 60, FIGHT, "Джеб, кросс, лоу. Чисто, с выдохом на каждый удар", say = "Техника. Дыши и работай чисто"),
+            s("Бёрпи на износ", 40, CARDIO, "Упал — отжался — встал — прыжок. Без пауз", say = "Бёрпи! На износ!"),
+            s("Техника под усталостью", 50, FIGHT, "Джеб, кросс, лоу. Чисто, с выдохом на каждый удар", say = "Техника. Дыши и работай чисто"),
             s("Взрыв: град ударов", 20, BURST, "Прямые на максимальной скорости, руки у лица", say = "Взрыв! Руки!"),
-            s("Двигайся и дыши", 50, PRESSURE, "Уходы, тип, джеб. Восстанавливай дыхание в движении", say = "Не стой! Двигайся!"),
+            s("Двигайся и дыши", 50, PRESSURE, "Уходы, тип, джеб. Дыши носом, восстанавливайся в движении", say = "Не стой! Двигайся!"),
             s("Взрыв: колени", 20, BURST, "Колени в клинче без остановки", say = "Взрыв! Колени!"),
         ),
         round(
             "Спролы",
-            s("Спролы на износ", 30, CARDIO, "Ноги назад, бёдра в пол — и сразу в стойку", say = "Спролы! На износ!"),
-            s("Мидл-кики под усталостью", 60, LEGS, "Полный разворот и возврат в стойку. Не роняй руки", say = "Мидл-кики. Держи технику"),
+            s("Спролы на износ", 40, CARDIO, "Ноги назад, бёдра в пол — и сразу в стойку", say = "Спролы! На износ!"),
+            s("Мидл-кики под усталостью", 50, LEGS, "Полный разворот и возврат в стойку. Не роняй руки", say = "Мидл-кики. Держи технику"),
             s("Взрыв: двойка + мидл", 20, BURST, "Джеб, кросс, мидл — и снова", say = "Взрыв! Двойка и мидл!"),
             s("Под давлением", 50, PRESSURE, "Отдыха нет: защита, уходы, ответные удары", say = "Не стой! Работай!"),
             s("Взрыв: лоу-кики", 20, BURST, "Левой-правой, без пауз", say = "Взрыв! Лоу-кики!"),
         ),
         round(
             "Колени",
-            s("Колени на износ", 30, CARDIO, "Прыжком меняй ноги, колено до груди", say = "Колени! На износ!"),
-            s("Клинч: колени и локти", 60, CLINCH, "Захват, колено, локоть. Тяни соперника вниз", say = "Клинч. Колени и локти"),
+            s("Колени на износ", 40, CARDIO, "Прыжком меняй ноги, колено до груди", say = "Колени! На износ!"),
+            s("Клинч: колени и локти", 50, CLINCH, "Захват, колено, локоть. Тяни соперника вниз", say = "Клинч. Колени и локти"),
             s("Взрыв: локти", 20, BURST, "Короткие локти с разворотом корпуса", say = "Взрыв! Локти!"),
             s("Под давлением", 50, PRESSURE, "Отдыха нет: защита, уходы, ответные удары", say = "Не стой! Работай!"),
             s("Взрыв: колени в клинче", 20, BURST, "Держи шею, колени без остановки", say = "Взрыв! Колени!"),
         ),
         round(
             "Выпрыгивания",
-            s("Выпрыгивания на износ", 30, CARDIO, "Присед и взрывной прыжок вверх", say = "Выпрыгивания! На износ!"),
-            s("Комбинации на 4 удара", 60, FIGHT, "Например: джеб, кросс, хук, лоу. Каждую серию — до конца", say = "Комбинации на четыре удара"),
+            s("Выпрыгивания на износ", 40, CARDIO, "Присед и взрывной прыжок вверх", say = "Выпрыгивания! На износ!"),
+            s("Комбинации на 4 удара", 50, FIGHT, "Например: джеб, кросс, хук, лоу. Каждую серию — до конца", say = "Комбинации на четыре удара"),
             s("Взрыв: град ударов", 20, BURST, "Прямые на максимальной скорости", say = "Взрыв! Руки!"),
             s("Под давлением", 50, PRESSURE, "Отдыха нет: защита, уходы, ответные удары", say = "Не стой! Работай!"),
             s("Взрыв: свитч-кики", 20, BURST, "Смена стойки и мидл, снова и снова", say = "Взрыв! Свитч!"),
         ),
         round(
             "Финал",
-            s("Бёрпи на износ", 30, CARDIO, "Последний раз. Всё, что осталось", say = "Бёрпи! Последний раз!"),
-            s("Свободный бой", 60, FIGHT, "Руки, ноги, колени — держи технику, когда тяжело"),
+            s("Бёрпи на износ", 40, CARDIO, "Последний раз. Всё, что осталось", say = "Бёрпи! Последний раз!"),
+            s("Свободный бой", 50, FIGHT, "Руки, ноги, колени — держи технику, когда тяжело"),
             s("Взрыв!", 20, BURST, "Любые удары на максимум"),
             s("Под давлением", 50, PRESSURE, "Отдыха нет: защита, уходы, ответные удары", say = "Не стой! Работай!"),
             s("Финальный взрыв", 20, BURST, "Последние 20 секунд. Отдай всё", say = "Финальный взрыв! Всё что есть!"),
         ),
     ) + listOf(
-        rest(45),
+        noseRest(30),
         finisher(
             "Добивка",
             s("Колени в клинче", 60, CLINCH, "Без остановки, даже когда ноги горят"),
             s("Планка", 60, STRENGTH, "Держи корпус, дыши ровно"),
         ),
+        easyShadow(),
         cooldown(),
     ),
 )
@@ -320,12 +391,13 @@ private fun championship() = Workout(
     title = "Чемпионские раунды",
     emoji = "🏆",
     intensity = 5,
+    focus = listOf(Focus.SPARRING, Focus.BREATH),
     tagline = "5 раундов по 3 минуты по сценарию настоящего боя",
-    description = "Симуляция боя по тайским правилам: 5 раундов по 3 минуты и 2 минуты отдыха. " +
+    description = "Симуляция боя по тайским правилам: 5 раундов по 3 минуты, отдых на полминуты короче, чем в бою. " +
         "Первый раунд — разведка, второй — разгон, третий и четвёртый — пик, где решается бой: " +
         "там взрывы приходят в случайные моменты. Пятый — добиваешь на всём, что осталось.",
     blocks = listOf(warmup()) + withRests(
-        120,
+        90,
         round(
             "Разведка",
             s("Джеб и тип: дистанция", 60, FIGHT, "Держи соперника на дистанции, изучай его реакции", say = "Джеб и тип. Держи дистанцию"),
@@ -350,7 +422,7 @@ private fun championship() = Workout(
             s("Колени и локти", 40, CLINCH, "Клинч до самого гонга"),
             s("Последние секунды!", 20, BURST, "Всё, что осталось. Победа сейчас", say = "Последние секунды! Всё что есть!"),
         ),
-    ) + listOf(cooldown()),
+    ) + listOf(easyShadow(), cooldown()),
 )
 
 private fun kicks() = Workout(
@@ -358,6 +430,7 @@ private fun kicks() = Workout(
     title = "Ноги-кувалды",
     emoji = "🦵",
     intensity = 4,
+    focus = listOf(Focus.TECHNIQUE, Focus.STRENGTH),
     tagline = "Лоу, мидл, тип и свитч — ноги, которые решают бой",
     description = "Тайский бокс — это ноги. Пять раундов ударов ногами с акцентом на разворот опорной стопы, " +
         "возврат в стойку и баланс, а затем силовой блок, чтобы удары стали тяжелее. " +
@@ -411,6 +484,7 @@ private fun kicks() = Workout(
             s("Баланс на левой", 30, LEGS, "Правое колено поднято, как для удара. Руки в защите", say = "Баланс. Стоим на левой"),
             s("Баланс на правой", 30, LEGS, "Левое колено поднято, как для удара. Руки в защите", say = "На правой"),
         ),
+        easyShadow(),
         cooldown(),
     ),
 )
@@ -420,6 +494,7 @@ private fun clinch() = Workout(
     title = "Клинч и колени",
     emoji = "🤼",
     intensity = 4,
+    focus = listOf(Focus.TECHNIQUE, Focus.STRENGTH),
     tagline = "Колени, локти и выносливость в ближнем бою",
     description = "Клинч — самая изматывающая часть тайского бокса. Пять раундов коленей и локтей, " +
         "плиометрика для взрывных ног, а в конце — укрепление шеи и корпуса, чтобы не проигрывать борьбу в клинче. " +
@@ -469,6 +544,7 @@ private fun clinch() = Workout(
             s("Боковая планка — правая", 30, STRENGTH, "Таз высоко, тело в одну линию", say = "Правая"),
             s("Скручивания с коленом", 45, STRENGTH, "Колено навстречу локтю, как удар в клинче"),
         ),
+        easyShadow(),
         cooldown(),
     ),
 )
@@ -477,11 +553,12 @@ private fun tabata() = Workout(
     id = "tabata",
     title = "Табата бойца",
     emoji = "⏱️",
-    intensity = 5,
-    tagline = "20 секунд ада, 10 секунд вдоха. Коротко и очень зло",
-    description = "Протокол Табата с ударами тайского бокса: 20 секунд на максимум, 10 секунд отдыха, " +
-        "8 подходов в раунде, два упражнения чередуются. Четыре раунда, между ними минута. " +
-        "Для дней, когда времени мало, а выжать себя надо.",
+    intensity = 3,
+    focus = listOf(Focus.TECHNIQUE, Focus.SPEED),
+    tagline = "Удары на скорость короткими отрезками: 20 секунд работы, 10 вдоха",
+    description = "Протокол Табата с ударами тайского бокса: 20 секунд на скорость, 10 секунд отдыха, " +
+        "8 подходов в раунде, два упражнения чередуются. По дыхалке не самая тяжёлая, зато учит " +
+        "бить быстро и чисто: каждый удар до конца, руки возвращаются к лицу, стойка не разваливается.",
     blocks = listOf(quickWarmup()) + withRests(
         60,
         tabataRound(
@@ -504,20 +581,22 @@ private fun tabata() = Workout(
             s("Бёрпи", 20, CARDIO, "Упал — встал — прыжок"),
             s("Локти и колени", 20, CLINCH, "Локоть, колено, локоть — без остановки"),
         ),
-    ) + listOf(cooldown()),
+    ) + listOf(easyShadow(), cooldown()),
 )
 
 private fun ladder() = Workout(
     id = "ladder",
     title = "Лестница боли",
     emoji = "🪜",
-    intensity = 4,
+    intensity = 5,
+    focus = listOf(Focus.BREATH, Focus.SPEED),
     tagline = "Каждую минуту взрыв длиннее: 10, 20… 50 секунд — и обратно",
-    description = "Минутная лестница. В начале каждой минуты — взрыв, остаток минуты — восстановление в движении: " +
-        "джеб, работа ног, дыхание. Взрыв растёт от 10 до 50 секунд, а восстановление тает, потом лестница идёт вниз. " +
-        "Учит работать со сбитым дыханием и восстанавливаться прямо в бою. Две лестницы: руки, затем ноги и колени.",
+    description = "Минутная лестница. В начале каждой минуты — взрыв, остаток минуты — восстановление в движении " +
+        "с закрытым ртом: джеб, работа ног, дыхание только носом. Взрыв растёт от 10 до 50 секунд, а восстановление " +
+        "тает, потом лестница идёт вниз. Учит работать со сбитым дыханием и восстанавливаться прямо в бою. " +
+        "Две лестницы: руки, затем ноги и колени.",
     blocks = listOf(warmup()) + withRests(
-        120,
+        noseRest(90),
         ladderRound(
             "Руки",
             listOf(
@@ -534,18 +613,19 @@ private fun ladder() = Workout(
                 "Свитч-кики" to "Смена стойки и мидл, снова и снова",
             ),
         ),
-    ) + listOf(cooldown()),
+    ) + listOf(easyShadow(), cooldown()),
 )
 
 private fun camp() = Workout(
     id = "camp",
     title = "Тайский лагерь",
     emoji = "💪",
-    intensity = 4,
-    tagline = "Круговая ОФП как в тайских лагерях: много повторов, мало пауз",
-    description = "В тайских лагерях после ударной работы делают сотни отжиманий, скручиваний и приседаний. " +
-        "Здесь — скакалка для разгона и четыре круга по шесть упражнений: 40 секунд работы, 15 секунд на переход, " +
-        "минута отдыха между кругами. Считай повторы и старайся побить свой результат в каждом круге.",
+    intensity = 5,
+    focus = listOf(Focus.STRENGTH, Focus.BREATH),
+    tagline = "Пять кругов ОФП без единой паузы и отдых только носом",
+    description = "Как в тайских лагерях, только жёстче: после скакалки пять кругов по 3 минуты, упражнения сменяются " +
+        "каждые 30 секунд без перехода. Между кругами 45 секунд, и дышать в них только носом. " +
+        "К третьему кругу дыхалка забита — дальше на характере. В конце минута бёрпи на количество.",
     blocks = listOf(
         warmup(),
         block(
@@ -554,8 +634,16 @@ private fun camp() = Workout(
             s("Скакалка: ускорение", 30, CARDIO, "Максимальная частота", say = "Ускорение!"),
             s("Скакалка: бег на месте", 60, CARDIO, "С ноги на ногу, как бег", say = "Бег на месте"),
         ),
-        rest(60),
-    ) + withRests(60, campCircuit(), campCircuit(), campCircuit(), campCircuit()) + listOf(cooldown()),
+        noseRest(45),
+    ) + withRests(noseRest(45), campCircuit(), campCircuit(), campCircuit(), campCircuit(), campCircuit()) + listOf(
+        noseRest(45),
+        finisher(
+            "Минута правды",
+            s("Бёрпи на количество", 60, CARDIO, "Считай повторы. В следующий раз — на один больше", say = "Минута правды! Бёрпи на количество"),
+        ),
+        easyShadow(),
+        cooldown(),
+    ),
 )
 
 private fun recovery() = Workout(
@@ -563,6 +651,7 @@ private fun recovery() = Workout(
     title = "Техника и восстановление",
     emoji = "🧘",
     intensity = 1,
+    focus = listOf(Focus.RECOVERY, Focus.TECHNIQUE),
     tagline = "Медленный бой с тенью, баланс и глубокая растяжка",
     description = "Для дня после тяжёлой тренировки или когда всё болит. Медленная работа на чистоту техники и баланс, " +
         "защита и работа ног, а затем длинная растяжка бёдер, паха и спины — всего, что у тайца всегда забито.",

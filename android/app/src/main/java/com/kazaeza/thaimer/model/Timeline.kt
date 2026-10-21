@@ -138,7 +138,7 @@ fun paceStep(seconds: Int) = Step(
     name = "Темп спарринга",
     seconds = seconds,
     kind = Kind.FIGHT,
-    hint = "Джеб, финты, движение. Работай на 60% — но будь готов",
+    hint = "Джеб, финты, движение. Дыши носом и будь готов к взрыву",
     say = "Темп",
 )
 

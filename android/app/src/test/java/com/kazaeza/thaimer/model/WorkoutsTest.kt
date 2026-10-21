@@ -9,9 +9,26 @@ class WorkoutsTest {
     private val all = Workouts.all
 
     @Test
-    fun `ten workouts with unique ids`() {
-        assertEquals(10, all.size)
-        assertEquals(10, all.map { it.id }.toSet().size)
+    fun `eleven workouts with unique ids, every one in a group and tagged`() {
+        assertEquals(11, all.size)
+        assertEquals(11, all.map { it.id }.toSet().size)
+        assertEquals(all, Workouts.groups.flatMap { it.workouts })
+        assertTrue(all.all { it.focus.isNotEmpty() })
+    }
+
+    @Test
+    fun `most workouts wind down with relaxed shadowboxing`() {
+        val relaxed = all.count { w -> w.blocks.any { b -> b.parts.any { it is Part.Fixed && it.step.kind == Kind.FLOW && it.step.seconds >= 180 } } }
+        assertTrue(relaxed >= 9)
+    }
+
+    @Test
+    fun `the pull-up session has pull-ups in every round and asks for a bar`() {
+        val w = Workouts.byId("third-minute")!!
+        assertEquals("турник", w.equipment)
+        w.blocks.filter { it.type == BlockType.ROUND }.forEach { r ->
+            assertTrue(r.parts.count { (it as Part.Fixed).step.kind == Kind.STRENGTH } >= 2)
+        }
     }
 
     @Test
@@ -63,7 +80,7 @@ class WorkoutsTest {
 
     @Test
     fun `rounds are three minutes where the format says so`() {
-        val threeMinuteFormats = setOf("classic", "sparring", "exhausted", "championship", "kicks", "clinch", "recovery")
+        val threeMinuteFormats = setOf("classic", "sparring", "exhausted", "championship", "kicks", "clinch", "recovery", "camp", "third-minute")
         for (w in all.filter { it.id in threeMinuteFormats }) {
             for (b in w.blocks.filter { it.type == BlockType.ROUND }) {
                 assertEquals("${w.id}/${b.title}", 180, b.seconds)

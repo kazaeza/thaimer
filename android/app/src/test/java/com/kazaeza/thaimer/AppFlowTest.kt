@@ -40,6 +40,8 @@ class AppFlowTest {
 
     @Test
     fun `pick a workout, start it, the clock runs in a foreground service, stop it`() {
+        // The fire intro plays first and hands over to the list on its own.
+        compose.waitUntil(10_000) { compose.onAllNodes(hasScrollAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Спарринг: рваный темп"))
         compose.onNodeWithText("Спарринг: рваный темп").performClick()
         compose.onNodeWithText("СТАРТ").performClick()
@@ -54,8 +56,9 @@ class AppFlowTest {
         val started = shadowOf(app).nextStartedService
         assertEquals(WorkoutService::class.java.name, started.component?.className)
 
-        // Prep (10 s) runs out: the warm-up begins.
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(11))
+        // 2 s head start, then prep (10 s) runs out: the warm-up begins.
+        assertTrue(session.startsInMs(android.os.SystemClock.elapsedRealtime()) > 0)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(13))
         compose.waitForIdle()
         assertEquals(1, app.controller.state.value!!.segment)
         compose.onNodeWithText("Суставная разминка").assertExists()
